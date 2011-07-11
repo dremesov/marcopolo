@@ -1,1 +1,6 @@
 build
+xcuserdata
+*.mode1*
+.DS_Store
+project.xcworkspace
+*.helpindex
