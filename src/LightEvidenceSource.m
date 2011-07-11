@@ -65,7 +65,11 @@
 	[lock lock];
 
 	// Read from the sensor device - index 0, 0 inputs, 2 outputs
-	kern_return_t kr = IOConnectMethodScalarIScalarO(ioPort, 0, 0, 2, &leftLight, &rightLight);
+	uint64_t out[2] = {0, 0}; size_t out_size = 2;
+	kern_return_t kr = IOConnectCallScalarMethod(ioPort, 0, NULL, 0, out, &out_size); // IOConnectMethodScalarIScalarO(ioPort, 0, 0, 2, &leftLight, &rightLight);
+
+	leftLight = out[0]; rightLight = out[1];
+	
 	[self setDataCollected:(kr == KERN_SUCCESS)];
 
 	// Update bindable key
@@ -77,7 +81,7 @@
 	[self setValue:perc forKey:@"currentLevel"];
 
 #ifdef DEBUG_MODE
-	//NSLog(@"%@ >> Current light level: L:%d R:%d. (%@)", [self class], leftLight, rightLight, currentLevel);
+	NSLog(@"%@ >> Current light level: L:%d R:%d. (%@)", [self class], leftLight, rightLight, currentLevel);
 #endif
 	[lock unlock];
 }

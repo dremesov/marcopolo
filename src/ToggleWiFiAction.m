@@ -5,7 +5,7 @@
 //  Created by David Symonds on 2/05/07.
 //
 
-#import "Apple80211.h"
+#import <CoreWLAN/CoreWLAN.h>
 #import "ToggleWiFiAction.h"
 
 
@@ -21,26 +21,17 @@
 
 - (BOOL)execute:(NSString **)errorString
 {
-	WirelessContextPtr wctxt;
-
-	if (!WirelessIsAvailable())
-		goto failure;
-	if (WirelessAttach(&wctxt, 0) != noErr)
-		goto failure;
-	if (WirelessSetPower(wctxt, turnOn ? 1 : 0) != noErr) {
-		WirelessDetach(wctxt);
-		goto failure;
+	NSArray *wifs = [CWInterface supportedInterfaces];
+	if ([wifs count]) {
+		CWInterface *wif = [CWInterface interfaceWithName: [wifs objectAtIndex:0]];
+		if (wif && [wif setPower:turnOn error: nil]) return YES;
 	}
-	WirelessDetach(wctxt);
-
-	// Success
-	return YES;
-
-failure:
+	
 	if (turnOn)
 		*errorString = NSLocalizedString(@"Failed turning WiFi on.", @"");
 	else
 		*errorString = NSLocalizedString(@"Failed turning WiFi off.", @"");
+	
 	return NO;
 }
 

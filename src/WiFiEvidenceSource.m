@@ -5,9 +5,25 @@
 //  Created by David Symonds on 29/03/07.
 //
 
-#import "Apple80211.h"
+#import <CoreWLAN/CoreWLAN.h>
 #import "WiFiEvidenceSource.h"
 
+@implementation NSString (LeftPadding)
+
+- (NSString *) stringByPaddingTheLeftToLength:(NSUInteger) newLength 
+								   withString:(NSString *) padString 
+							  startingAtIndex:(NSUInteger) padIndex
+{
+    if ([self length] <= newLength)
+        return [[@"" stringByPaddingToLength:newLength - [self length] 
+								  withString:padString 
+							 startingAtIndex:padIndex] 
+				stringByAppendingString:self];
+    else
+        return [[self copy] autorelease];
+}
+
+@end
 
 @implementation WiFiEvidenceSource
 
@@ -48,72 +64,37 @@ static NSString *macToString(const UInt8 *mac)
 {
 	NSMutableArray *all_aps = [NSMutableArray array];
 
-	if (!WirelessIsAvailable())
-		goto end_of_scan;
-
-	WirelessContextPtr wctxt = 0;
-	WirelessInfo info;
-	NSArray *list = nil;
-	NSString *mac_to_skip = nil;
-	BOOL do_scan = YES;
-	WIErr err;
-
-	if ((err = WirelessAttach(&wctxt, 0)) != noErr) {
-#ifdef DEBUG_MODE
-		NSLog(@"%@ >> WirelessAttached failed with error code 0x%08x", [self class], err);
-#endif
-		goto end_of_scan;
+	NSArray *wifs = [CWInterface supportedInterfaces];
+	if ([wifs count]) {
+		CWInterface *wif = [CWInterface interfaceWithName: [wifs objectAtIndex:0]];
+		if (wif) {
+			// NSString *bssid_to_skip = nil;
+			
+			if (kCWInterfaceStateRunning == [[wif interfaceState] intValue]) {
+				NSString *ssid = [wif ssid];
+				NSString *bssid = [[wif bssid] stringByPaddingTheLeftToLength: 17 withString: @"0" startingAtIndex: 0];
+				
+				// bssid_to_skip = bssid;
+				[all_aps addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+									ssid, @"SSID", bssid, @"MAC", nil]];
+			} else if ([[NSUserDefaults standardUserDefaults] boolForKey:@"WiFiAlwaysScans"] ||
+					   wakeUpCounter-- > 0) {
+				NSArray *scanResults = [wif scanForNetworksWithParameters: nil error: nil];
+				if (scanResults && [scanResults count]) {
+					NSEnumerator *en = [scanResults objectEnumerator];
+					CWNetwork *net = nil;
+					while ((net = [en nextObject])) {
+						NSString *ssid = [net ssid];
+						NSString *bssid = [[net bssid] stringByPaddingTheLeftToLength: 17 withString: @"0" startingAtIndex: 0];
+						
+						[all_aps addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+											ssid, @"SSID", bssid, @"MAC", nil]];
+					}
+				}
+			}
+		}
 	}
 
-	// First, check to see if we're already associated
-	if ((WirelessGetInfo(wctxt, &info) == noErr) && (info.power > 0) && (info.link_qual > 0)) {
-		NSString *ssid = [NSString stringWithCString:(const char *) info.name
-						    encoding:NSISOLatin1StringEncoding];
-		NSString *mac = macToString(info.macAddress);
-		mac_to_skip = mac;
-		[all_aps addObject:[NSDictionary dictionaryWithObjectsAndKeys:
-					ssid, @"SSID", mac, @"MAC", nil]];
-		do_scan = NO;
-	}
-
-	if ([[NSUserDefaults standardUserDefaults] boolForKey:@"WiFiAlwaysScans"])
-		do_scan = YES;
-	if (wakeUpCounter > 0) {
-		do_scan = YES;
-		--wakeUpCounter;
-	}
-
-	// NOTE: Use WirelessScanSplit if we want to cleanly ignore ad-hoc networks
-	// NOTE: won't return duplicate SSIDs
-	if (do_scan && (WirelessScan(wctxt, (CFArrayRef *) &list, 1) != noErr)) {
-		WirelessDetach(wctxt);
-		goto end_of_scan;
-	}
-	if (do_scan && !list) {
-		WirelessDetach(wctxt);
-		goto end_of_scan;
-	}
-
-	NSEnumerator *en = [list objectEnumerator];
-	const WirelessNetworkInfo *ap;
-	NSData *data;
-	while ((data = [en nextObject])) {
-		ap = (const WirelessNetworkInfo *) [data bytes];
-		// XXX: I'm not sure about the string encoding here...
-		NSString *ssid = [NSString stringWithCString:(const char *) ap->name
-						    encoding:NSISOLatin1StringEncoding];
-		NSString *mac = macToString(ap->macAddress);
-
-		if (mac_to_skip && [mac_to_skip isEqualToString:mac])
-			continue;
-
-		[all_aps addObject:[NSDictionary dictionaryWithObjectsAndKeys:
-			ssid, @"SSID", mac, @"MAC", nil]];
-	}
-
-	WirelessDetach(wctxt);
-
-end_of_scan:
 	[lock lock];
 	[apList setArray:all_aps];
 	[self setDataCollected:[apList count] > 0];
@@ -121,6 +102,7 @@ end_of_scan:
 	NSLog(@"%@ >> %@", [self class], apList);
 #endif
 	[lock unlock];
+	
 }
 
 - (void)clearCollectedData

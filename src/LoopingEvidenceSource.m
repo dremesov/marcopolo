@@ -35,14 +35,14 @@
 {
 	if (timer) {
 		[NSThread detachNewThreadSelector:@selector(loopTimerPoll:)
-					 toTarget:self
-				       withObject:nil];
+								 toTarget:self
+							   withObject:nil];
 		return;
 	}
 
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 	[self setThreadNameFromClassName];
-	DSLog(@"Updating...");
+	DSLog(@"Updating %@ ...", [self class]);
 	[self performSelector:@selector(doUpdate)];
 	[pool release];
 }
@@ -53,10 +53,10 @@
 		return;
 
 	loopTimer = [NSTimer scheduledTimerWithTimeInterval:loopInterval
-						     target:self
-						   selector:@selector(loopTimerPoll:)
-						   userInfo:nil
-						    repeats:YES];
+												 target:self
+											   selector:@selector(loopTimerPoll:)
+											   userInfo:nil
+												repeats:YES];
 	[self loopTimerPoll:loopTimer];
 
 	running = YES;
